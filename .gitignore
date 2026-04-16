@@ -1,0 +1,13 @@
+# Bỏ qua các file video
+*.mp4
+*.avi
+*.mkv
+
+# Bỏ qua file trọng số của YOLO
+*.pt
+
+# Bỏ qua các thư mục tạm của Python và môi trường ảo (nếu có để trong thư mục dự án)
+__pycache__/
+.env
+venv/
+env/
