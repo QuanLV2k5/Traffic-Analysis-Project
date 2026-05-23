@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚦 Traffic Management Dashboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+
+<body>
+    <header class="header">
+        <div class="container">
+            <div class="logo">
+                <i class="fas fa-route"></i>
+                <h1>Hệ thống giám sát giao thông</h1>
+            </div>
+            <div class="header-stats">
+                <div class="stat-item">
+                    <span class="stat-number" id="totalVehicles">2,615</span>
+                    <span>Tổng xe</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number" id="complianceRate">85.2%</span>
+                    <span>Mũ bảo hiểm</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number" id="avgSpeed">47</span>
+                    <span>Tốc độ TB</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="dashboard-grid">
+
+            <div class="video-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-video"></i> Thông tin giao thông trực tiếp</h3>
+                    <div class="upload-section" style="display: flex; gap: 10px;">
+                        <input type="file" id="videoUpload" accept="video/mp4, video/avi" style="display: none;">
+
+                        <button id="replayBtn" class="tab"
+                            style="font-size: 0.9rem; padding: 8px 15px; background: #ffa502; color: #fff;">
+                            <i class="fas fa-redo"></i> Xem lại
+                        </button>
+
+                        <button onclick="document.getElementById('videoUpload').click()" class="tab active upload-btn"
+                            style="font-size: 0.9rem; padding: 8px 15px;">
+                            <i class="fas fa-upload"></i> Tải video lên
+                        </button>
+                    </div>
+                </div>
+
+                <div class="video-container">
+                    <img id="videoStream" src="" alt="Waiting for video stream..." style="display: none;">
+                    <div id="waitingMessage"
+                        style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #00d4ff;">
+                        Please upload a video to start AI detection...
+                    </div>
+                </div>
+            </div>
+
+            <div class="detection-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-eye"></i> Phát hiện realtime</h3>
+                </div>
+                <div class="detection-list" id="detectionList">
+                    Đang tải...
+                </div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card helmet-card">
+                    <div class="stat-icon"><i class="fas fa-hard-hat"></i></div>
+                    <h4>Mũ bảo hiểm</h4>
+                    <div class="stat-numbers">
+                        <span class="big-number" id="helmetCompliance">85.2%</span>
+                        <span>Tuân thủ</span>
+                    </div>
+                </div>
+                <div class="stat-card vehicle-card">
+                    <div class="stat-icon"><i class="fas fa-car-side"></i></div>
+                    <h4>Phân loại xe</h4>
+                    <div class="vehicle-breakdown" id="vehicleBreakdown"></div>
+                </div>
+                <div class="stat-card alert-card">
+                    <div class="stat-icon"><i class="fas fa-bell"></i></div>
+                    <h4>Cảnh báo</h4>
+                    <div class="alert-count" id="alertCount">12</div>
+                </div>
+            </div>
+
+            <div class="charts-panel">
+                <div class="panel-header">
+                    <h3><i class="fas fa-chart-line"></i> Analytics</h3>
+                    <div class="chart-tabs">
+                        <button class="tab active" data-tab="traffic">Lưu lượng</button>
+                        <button class="tab" data-tab="speed">Tốc độ</button>
+                        <button class="tab" data-tab="violation">Vi phạm</button>
+                    </div>
+                </div>
+                <div class="charts-container">
+                    <canvas id="trafficChart" class="chart"></canvas>
+                    <canvas id="speedChart" class="chart" style="display:none;"></canvas>
+                    <canvas id="violationChart" class="chart" style="display:none;"></canvas>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+
+</html>
