@@ -7,40 +7,56 @@ from db_helper import insert_log_async
 
 # 1. LOAD MODEL
 model = YOLO('models/best.pt')
+helmet_model = YOLO('models/helmet.pt')
 
 # 2. ĐỊNH NGHĨA ÁNH XẠ
-REAL_NAMES = {0: "Xe may", 1: "O to", 2: "Xe tai", 3: "Xe buyt"}
-CLASS_COLORS = {"Xe may": (0, 165, 255), "O to": (
-    255, 255, 0), "Xe tai": (255, 0, 255), "Xe buyt": (0, 0, 255)}
+REAL_NAMES = {0: "Motorcycle", 1: "Car", 2: "Bus", 3: "Truck"}
+CLASS_COLORS = {
+    "Motorcycle": (0, 165, 255),
+    "Car": (255, 255, 0),
+    "Bus": (0, 0, 255),
+    "Truck": (255, 0, 255)
+}
 
 # 3. BIẾN TOÀN CÚC
 current_video_path = None
+current_source_id = None  # <-- Đã thêm biến lưu ID video
 counted_ids = set()
 traffic_stats = {"total_vehicles": 0,
-                 "motorbike": 0, "car": 0, "truck": 0, "bus": 0}
+                 "motorbike": 0, "car": 0, "truck": 0, "bus": 0,
+                 "no_helmet": 0}
 event_logs = []
 track_history = {}
 virtual_line = []
-is_running = False  # <-- CỜ TRẠNG THÁI CHỜ VẼ VẠCH
+is_running = False
 
 
 def set_virtual_line(x1, y1, x2, y2):
     global virtual_line, is_running
     virtual_line = [(x1, y1), (x2, y2)]
-    is_running = True  # <-- Người dùng vẽ xong 2 điểm, kích hoạt chạy video!
+    is_running = True
     print(f"Đã cập nhật vạch mới: {virtual_line}")
 
 
-def reset_ai_state(filepath):
-    global current_video_path, counted_ids, traffic_stats, event_logs, track_history, virtual_line, is_running
+# --- ĐÃ SỬA: Nhận thêm tham số source_id từ main.py ---
+def reset_ai_state(filepath, source_id=None):
+    global current_video_path, current_source_id, counted_ids, traffic_stats, event_logs, track_history, virtual_line, is_running
     current_video_path = filepath
+    current_source_id = source_id
     counted_ids.clear()
     event_logs.clear()
     track_history.clear()
     virtual_line = []
-    is_running = False  # Khóa video, chờ vẽ vạch
+    is_running = False
     for key in traffic_stats:
         traffic_stats[key] = 0
+
+# --- ĐÃ THÊM: Hàm lấy ID video hiện tại để main.py gọi ---
+
+
+def get_current_source_id():
+    global current_source_id
+    return current_source_id
 
 
 def replay_video():
@@ -52,11 +68,8 @@ def replay_video():
     for key in traffic_stats:
         traffic_stats[key] = 0
 
-    # Bật cờ chạy luôn vì vạch đã được vẽ từ lần trước
     is_running = True
     print("🔄 Đã reset số liệu, chuẩn bị Replay...")
-
-# === THUẬT TOÁN TOÁN HỌC: KIỂM TRA GIAO CẮT ĐOẠN THẲNG ===
 
 
 def ccw(A, B, C):
@@ -65,39 +78,35 @@ def ccw(A, B, C):
 
 def intersect(A, B, C, D):
     return ccw(A, C, D) != ccw(B, C, D) and ccw(A, B, C) != ccw(A, B, D)
-# ============================================================
 
 
 def generate_frames():
-    global current_video_path, traffic_stats, counted_ids, event_logs, track_history, virtual_line, is_running
+    global current_video_path, traffic_stats, counted_ids, event_logs, track_history, virtual_line, is_running, current_source_id
 
     if not current_video_path or not os.path.exists(current_video_path):
         return
 
     cap = cv2.VideoCapture(current_video_path)
 
-    # --- PHASE 1: DỪNG Ở KHUNG HÌNH ĐẦU TIÊN CHỜ VẼ VẠCH ---
     success, first_frame = cap.read()
     if success:
         first_frame = cv2.resize(first_frame, (1020, 600))
         while not is_running:
             temp_frame = first_frame.copy()
-            # Vẽ thông báo nhấp nháy hoặc mờ lên màn hình
             cv2.rectangle(temp_frame, (160, 250), (860, 320), (0, 0, 0), -1)
             cv2.putText(temp_frame, "HAY CLICK 2 DIEM DE VE VACH DEM XE!", (180, 300),
                         cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 3)
 
             ret, buffer = cv2.imencode('.jpg', temp_frame)
             yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + buffer.tobytes() + b'\r\n')
-            time.sleep(0.1)  # Tạm nghỉ để không ngốn CPU
+            time.sleep(0.1)
 
-    # --- PHASE 2: BẮT ĐẦU CHẠY HỆ THỐNG AI (ĐÃ XÓA FRAME SKIPPING) ---
     line_start, line_end = virtual_line[0], virtual_line[1]
 
     while cap.isOpened():
         success, frame = cap.read()
         if not success:
-            break  # Hết video
+            break
 
         frame = cv2.resize(frame, (1020, 600))
         cv2.line(frame, line_start, line_end, (0, 255, 255), 3)
@@ -126,7 +135,6 @@ def generate_frames():
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
                 cv2.circle(frame, (cx, cy), 5, (0, 0, 255), -1)
 
-                # ================= LOGIC VECTOR CẮT =================
                 prev_pt = track_history.get(track_id)
                 current_pt = (cx, cy)
 
@@ -135,26 +143,61 @@ def generate_frames():
                         if track_id not in counted_ids:
                             counted_ids.add(track_id)
                             traffic_stats["total_vehicles"] += 1
+                            print(
+                                f"[AI COUNT] 🟢 Vừa đếm: {class_name} (ID: {track_id}) | TỔNG SỐ XE: {traffic_stats['total_vehicles']}")
 
-                            if class_name == "Xe may":
+                            log_type = class_name
+
+                            if class_name == "Motorcycle":
                                 traffic_stats["motorbike"] += 1
-                            elif class_name == "O to":
+
+                                if helmet_model is not None:
+                                    h_img, w_img, _ = frame.shape
+                                    crop_y1 = max(0, y1 - 20)
+                                    crop_y2 = min(h_img, y2)
+                                    crop_x1 = max(0, x1 - 10)
+                                    crop_x2 = min(w_img, x2 + 10)
+
+                                    motorcycle_crop = frame[crop_y1:crop_y2,
+                                                            crop_x1:crop_x2]
+
+                                    if motorcycle_crop.size > 0:
+                                        h_results = helmet_model.predict(
+                                            motorcycle_crop, conf=0.4, verbose=False)
+                                        is_violation = False
+                                        for h_box in h_results[0].boxes:
+                                            h_name = helmet_model.names[int(
+                                                h_box.cls[0])].lower()
+                                            if "no" in h_name or "without" in h_name:
+                                                is_violation = True
+                                                break
+
+                                        if is_violation:
+                                            traffic_stats["no_helmet"] += 1
+                                            log_type = "🚨 Không mũ"
+                                            cv2.rectangle(
+                                                frame, (x1, y1), (x2, y2), (0, 0, 255), 4)
+                                            cv2.putText(
+                                                frame, "VI PHAM!", (x1, y1 - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 3)
+
+                            elif class_name == "Car":
                                 traffic_stats["car"] += 1
-                            elif class_name == "Xe tai":
+                            elif class_name == "Truck":
                                 traffic_stats["truck"] += 1
-                            elif class_name == "Xe buyt":
+                            elif class_name == "Bus":
                                 traffic_stats["bus"] += 1
 
-                            # 1. Định dạng thời gian cho Array RAM (chỉ lấy Giờ:Phút:Giây)
                             time_ram = datetime.datetime.now().strftime("%H:%M:%S")
                             event_logs.insert(
-                                0, {"id": track_id, "type": class_name, "time": time_ram})
+                                0, {"id": track_id, "type": log_type, "time": time_ram})
                             if len(event_logs) > 50:
                                 event_logs.pop()
 
-                            # 2. ĐỊNH DẠNG THỜI GIAN CHUẨN SQL & LƯU VÀO DATABASE
                             time_sql = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                            insert_log_async(track_id, class_name, time_sql)
+
+                            # --- ĐÃ SỬA: Đẩy current_source_id vào db_helper ---
+                            insert_log_async(
+                                track_id, log_type, time_sql, current_source_id)
 
                 track_history[track_id] = current_pt
 

@@ -1,43 +1,26 @@
 class TrafficDashboard {
     constructor() {
-        this.initCharts();
+        this.charts = {};
         this.startRealtimeUpdates();
         this.bindEvents();
     }
 
     startRealtimeUpdates() {
-        // Cứ mỗi 1.5 giây sẽ gọi API một lần để cập nhật số liệu
         setInterval(async () => {
             await this.updateStats();
             await this.updateVehicleCount();
             await this.updateRealtimeEvents();
-        }, 1500);
+        }, 1000);
     }
 
     async updateStats() {
         try {
             const res = await fetch('http://localhost:5000/api/stats');
             const stats = await res.json();
-
-            // 1. Cập nhật con số trên Header
             document.getElementById('totalVehicles').textContent = stats.total_vehicles.toLocaleString();
-
-            // 2. Cập nhật Biểu đồ động
-            if (this.trafficChart) {
-                const now = new Date().toLocaleTimeString('vi-VN', { hour12: false });
-
-                // Bơm dữ liệu mới vào biểu đồ
-                this.trafficChart.data.labels.push(now);
-                this.trafficChart.data.datasets[0].data.push(stats.total_vehicles);
-
-                // Giữ cho biểu đồ chỉ hiển thị 15 mốc thời gian gần nhất (cuộn ngang)
-                if (this.trafficChart.data.labels.length > 15) {
-                    this.trafficChart.data.labels.shift();
-                    this.trafficChart.data.datasets[0].data.shift();
-                }
-
-                this.trafficChart.update();
-            }
+            document.getElementById('complianceRate').textContent = stats.compliance_rate;
+            document.getElementById('helmetCompliance').textContent = stats.compliance_rate;
+            document.getElementById('alertCount').textContent = stats.alerts;
         } catch (e) { }
     }
 
@@ -68,15 +51,25 @@ class TrafficDashboard {
 
             list.innerHTML = events.map(e => {
                 let icon = "car";
-                if (e.type === "Xe may") icon = "motorcycle";
-                if (e.type === "Xe tai") icon = "truck";
-                if (e.type === "Xe buyt") icon = "bus";
+                let color = "#00d4ff";
+                let borderClass = "";
+
+                if (e.type.includes("Motorcycle")) {
+                    icon = "motorcycle";
+                    if (e.type.includes("no helmet") || e.type.includes("Không mũ") || e.type.includes("no")) {
+                        icon = "exclamation-triangle";
+                        color = "#ff4757";
+                        borderClass = "helmet-no";
+                    }
+                }
+                else if (e.type === "Truck") icon = "truck";
+                else if (e.type === "Bus") icon = "bus";
 
                 return `
-                <div class="detection-item" style="animation: fadeIn 0.5s ease-out;">
+                <div class="detection-item ${borderClass}" style="animation: fadeIn 0.5s ease-out;">
                     <div style="display: flex; gap: 10px; align-items: center;">
-                        <i class="fas fa-${icon}" style="color: #00d4ff;"></i>
-                        <span><strong>${e.type}</strong> (ID: ${e.id})</span>
+                        <i class="fas fa-${icon}" style="color: ${color};"></i>
+                        <span style="color: ${color};"><strong>${e.type}</strong> (ID: ${e.id})</span>
                     </div>
                     <div style="color: #00ff00; font-size: 0.9em;">[${e.time}]</div>
                 </div>
@@ -84,35 +77,97 @@ class TrafficDashboard {
         } catch (e) { }
     }
 
-    initCharts() {
-        const ctx = document.getElementById('trafficChart');
-        this.trafficChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: 'Tổng lượng xe',
-                    data: [],
-                    borderColor: '#00d4ff',
-                    backgroundColor: 'rgba(0, 212, 255, 0.1)',
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { ticks: { color: 'white' } },
-                    y: { ticks: { color: 'white' }, beginAtZero: true }
-                },
-                animation: { duration: 0 } // Tắt animation để tránh giật khi cuộn
+    // ==========================================
+    // HÀM VẼ 3 BIỂU ĐỒ TỪ DATABASE
+    // ==========================================
+    async loadAndDrawCharts() {
+        try {
+            const res = await fetch('http://localhost:5000/api/chart_data');
+            const dbData = await res.json();
+
+            if (!dbData.traffic_over_time || dbData.traffic_over_time.labels.length === 0) {
+                alert("Đang phân tích, chưa có đủ dữ liệu biểu đồ. Hãy chờ xe chạy qua vạch rồi bấm lại!");
+                return;
             }
-        });
+
+            Chart.defaults.color = '#fff';
+
+            // 1. Line Chart
+            if (this.charts.traffic) this.charts.traffic.destroy();
+            const ctxTraffic = document.getElementById('trafficChart').getContext('2d');
+            this.charts.traffic = new Chart(ctxTraffic, {
+                type: 'line',
+                data: {
+                    labels: dbData.traffic_over_time.labels,
+                    datasets: [{
+                        label: 'Số lượng xe theo từng phút',
+                        data: dbData.traffic_over_time.data,
+                        borderColor: '#00d4ff',
+                        backgroundColor: 'rgba(0, 212, 255, 0.2)',
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            // 2. Doughnut Chart (Phân loại xe)
+            if (this.charts.vehicleType) this.charts.vehicleType.destroy();
+            const ctxVehicle = document.getElementById('vehicleTypeChart').getContext('2d');
+            this.charts.vehicleType = new Chart(ctxVehicle, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Xe máy', 'Ô tô', 'Xe tải', 'Xe buýt'],
+                    datasets: [{
+                        data: [
+                            dbData.vehicle_types.Motorcycle,
+                            dbData.vehicle_types.Car,
+                            dbData.vehicle_types.Truck,
+                            dbData.vehicle_types.Bus
+                        ],
+                        backgroundColor: ['#00a8ff', '#fbc531', '#e84118', '#8c7ae6'],
+                        borderWidth: 0
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            // 3. Pie Chart (Mũ bảo hiểm)
+            if (this.charts.violation) this.charts.violation.destroy();
+            const ctxViolation = document.getElementById('violationChart').getContext('2d');
+            this.charts.violation = new Chart(ctxViolation, {
+                type: 'pie',
+                data: {
+                    labels: ['Tuân thủ (Có mũ)', 'Vi phạm (Không mũ)'],
+                    datasets: [{
+                        data: [dbData.violations.Helmet, dbData.violations.No_Helmet],
+                        backgroundColor: ['#4cd137', '#e84118'],
+                        borderWidth: 0
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+
+            console.log("Đã vẽ biểu đồ thành công!");
+
+        } catch (e) {
+            console.error("Lỗi vẽ biểu đồ:", e);
+        }
     }
 
+
     bindEvents() {
-        // 1. Upload Video
+        const overlayCanvas = document.getElementById('overlayCanvas');
+        const ctx = overlayCanvas ? overlayCanvas.getContext('2d') : null;
+
+        const resizeCanvas = () => {
+            if (overlayCanvas) {
+                overlayCanvas.width = overlayCanvas.clientWidth;
+                overlayCanvas.height = overlayCanvas.clientHeight;
+            }
+        };
+        window.addEventListener('resize', resizeCanvas);
+
         const uploadInput = document.getElementById('videoUpload');
         uploadInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
@@ -121,6 +176,7 @@ class TrafficDashboard {
             document.getElementById('waitingMessage').innerText = "Uploading & Initializing...";
             document.getElementById('waitingMessage').style.display = 'block';
             document.getElementById('videoStream').style.display = 'none';
+            overlayCanvas.style.display = 'none';
 
             const formData = new FormData();
             formData.append('video', file);
@@ -136,60 +192,89 @@ class TrafficDashboard {
                     document.getElementById('waitingMessage').style.display = 'none';
                     const videoStream = document.getElementById('videoStream');
                     videoStream.style.display = 'block';
+                    overlayCanvas.style.display = 'block';
+                    resizeCanvas();
+
                     videoStream.src = 'http://localhost:5000/video_feed?' + new Date().getTime();
 
-                    // Reset biểu đồ khi up video mới
-                    if (this.trafficChart) {
-                        this.trafficChart.data.labels = [];
-                        this.trafficChart.data.datasets[0].data = [];
-                        this.trafficChart.update();
-                    }
+                    // Reset Chart
+                    Object.values(this.charts).forEach(chart => chart.destroy());
+                    this.charts = {};
                 }
             } catch (error) { console.error('Upload failed:', error); }
         });
 
-        // 2. Bắt sự kiện Click vẽ vạch trên Video
-        const videoElement = document.getElementById('videoStream');
         let clickPoints = [];
-        videoElement.addEventListener('click', async (e) => {
-            if (videoElement.style.display === 'none') return;
+        let isDrawing = false;
 
-            const rect = videoElement.getBoundingClientRect();
-            const scaleX = 1020 / rect.width;
-            const scaleY = 600 / rect.height;
-            const x = Math.round((e.clientX - rect.left) * scaleX);
-            const y = Math.round((e.clientY - rect.top) * scaleY);
+        if (overlayCanvas) {
+            overlayCanvas.addEventListener('mousemove', (e) => {
+                if (!isDrawing || clickPoints.length !== 1) return;
+                const rect = overlayCanvas.getBoundingClientRect();
+                const currentX = e.clientX - rect.left;
+                const currentY = e.clientY - rect.top;
 
-            clickPoints.push({ x, y });
+                ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                ctx.beginPath();
+                ctx.arc(clickPoints[0].canvasX, clickPoints[0].canvasY, 6, 0, 2 * Math.PI);
+                ctx.fillStyle = '#ff4757';
+                ctx.fill();
 
-            if (clickPoints.length === 1) {
-                const msg = document.getElementById('waitingMessage');
-                msg.style.display = 'block';
-                msg.style.background = 'rgba(0,0,0,0.8)';
-                msg.innerText = `Đã chọn điểm 1: (${x}, ${y}). Hãy click điểm thứ 2!`;
-                setTimeout(() => msg.style.display = 'none', 2000);
-            }
+                ctx.beginPath();
+                ctx.moveTo(clickPoints[0].canvasX, clickPoints[0].canvasY);
+                ctx.lineTo(currentX, currentY);
+                ctx.strokeStyle = '#00d4ff';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([8, 8]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            });
 
-            if (clickPoints.length === 2) {
-                try {
-                    await fetch('http://localhost:5000/api/set_line', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            x1: clickPoints[0].x, y1: clickPoints[0].y,
-                            x2: clickPoints[1].x, y2: clickPoints[1].y
-                        })
-                    });
+            overlayCanvas.addEventListener('click', async (e) => {
+                if (overlayCanvas.style.display === 'none') return;
+                const rect = overlayCanvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+
+                const scaleX = 1020 / rect.width;
+                const scaleY = 600 / rect.height;
+                const backendX = Math.round(x * scaleX);
+                const backendY = Math.round(y * scaleY);
+
+                clickPoints.push({ canvasX: x, canvasY: y, backendX, backendY });
+
+                if (clickPoints.length === 1) {
+                    isDrawing = true;
                     const msg = document.getElementById('waitingMessage');
                     msg.style.display = 'block';
-                    msg.innerText = `✅ Đã vẽ vạch mới! Video bắt đầu chạy...`;
-                    setTimeout(() => msg.style.display = 'none', 2000);
-                } catch (error) { }
-                clickPoints = [];
-            }
-        });
+                    msg.style.background = 'rgba(0,0,0,0.8)';
+                    msg.innerText = `📍 Đã đặt điểm bắt đầu. Hãy rê chuột và click điểm kết thúc!`;
+                    setTimeout(() => msg.style.display = 'none', 3000);
+                }
 
-        // 3. Xử lý nút Replay
+                if (clickPoints.length === 2) {
+                    isDrawing = false;
+                    ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+
+                    try {
+                        await fetch('http://localhost:5000/api/set_line', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                x1: clickPoints[0].backendX, y1: clickPoints[0].backendY,
+                                x2: clickPoints[1].backendX, y2: clickPoints[1].backendY
+                            })
+                        });
+                        const msg = document.getElementById('waitingMessage');
+                        msg.style.display = 'block';
+                        msg.innerText = `✅ Đã vẽ vạch mới! Khởi động AI...`;
+                        setTimeout(() => msg.style.display = 'none', 2000);
+                    } catch (error) { console.error('Lỗi khi vẽ vạch:', error); }
+                    clickPoints = [];
+                }
+            });
+        }
+
         const replayBtn = document.getElementById('replayBtn');
         if (replayBtn) {
             replayBtn.addEventListener('click', async () => {
@@ -197,13 +282,8 @@ class TrafficDashboard {
                     const res = await fetch('http://localhost:5000/api/replay', { method: 'POST' });
                     const data = await res.json();
                     if (data.success) {
-                        // Xóa sạch biểu đồ cũ
-                        if (this.trafficChart) {
-                            this.trafficChart.data.labels = [];
-                            this.trafficChart.data.datasets[0].data = [];
-                            this.trafficChart.update();
-                        }
-                        // Load lại luồng
+                        Object.values(this.charts).forEach(chart => chart.destroy());
+                        this.charts = {};
                         const videoStream = document.getElementById('videoStream');
                         videoStream.src = 'http://localhost:5000/video_feed?' + new Date().getTime();
                     }
@@ -211,7 +291,18 @@ class TrafficDashboard {
             });
         }
 
-        // 4. Tab biểu đồ (Tránh bị dính sự kiện vào các nút khác)
+        // =====================================
+        // SỰ KIỆN CHO NÚT TỔNG KẾT VÀ TABS
+        // =====================================
+        const btnDrawChart = document.getElementById('btnDrawChart');
+        if (btnDrawChart) {
+            btnDrawChart.addEventListener('click', () => {
+                // Nhảy về Tab Lưu lượng mặc định
+                document.querySelector('.tab[data-tab="traffic"]').click();
+                this.loadAndDrawCharts();
+            });
+        }
+
         document.querySelectorAll('.tab').forEach(tab => {
             if (!tab.classList.contains('upload-btn') && tab.id !== 'replayBtn') {
                 tab.onclick = (e) => {

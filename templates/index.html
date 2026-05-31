@@ -18,16 +18,12 @@
             </div>
             <div class="header-stats">
                 <div class="stat-item">
-                    <span class="stat-number" id="totalVehicles">2,615</span>
+                    <span class="stat-number" id="totalVehicles">0</span>
                     <span>Tổng xe</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-number" id="complianceRate">85.2%</span>
+                    <span class="stat-number" id="complianceRate">100%</span>
                     <span>Mũ bảo hiểm</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-number" id="avgSpeed">47</span>
-                    <span>Tốc độ TB</span>
                 </div>
             </div>
         </div>
@@ -56,9 +52,11 @@
 
                 <div class="video-container">
                     <img id="videoStream" src="" alt="Waiting for video stream..." style="display: none;">
+                    <canvas id="overlayCanvas"
+                        style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; z-index: 10; cursor: crosshair;"></canvas>
                     <div id="waitingMessage"
                         style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #00d4ff;">
-                        Please upload a video to start AI detection...
+                        Vui lòng tải video lên để bắt đầu quá trình nhận diện bằng AI...
                     </div>
                 </div>
             </div>
@@ -68,7 +66,7 @@
                     <h3><i class="fas fa-eye"></i> Phát hiện realtime</h3>
                 </div>
                 <div class="detection-list" id="detectionList">
-                    Đang tải...
+                    Đang chờ xe đi qua...
                 </div>
             </div>
 
@@ -77,35 +75,50 @@
                     <div class="stat-icon"><i class="fas fa-hard-hat"></i></div>
                     <h4>Mũ bảo hiểm</h4>
                     <div class="stat-numbers">
-                        <span class="big-number" id="helmetCompliance">85.2%</span>
+                        <span class="big-number" id="helmetCompliance">100%</span>
                         <span>Tuân thủ</span>
                     </div>
                 </div>
                 <div class="stat-card vehicle-card">
                     <div class="stat-icon"><i class="fas fa-car-side"></i></div>
                     <h4>Phân loại xe</h4>
-                    <div class="vehicle-breakdown" id="vehicleBreakdown"></div>
+                    <div class="vehicle-breakdown" id="vehicleBreakdown">
+                        <div class="vehicle-item"><span>🏍️ Xe máy</span><strong>0</strong></div>
+                        <div class="vehicle-item"><span>🚗 Ô tô</span><strong>0</strong></div>
+                        <div class="vehicle-item"><span>🚚 Xe tải</span><strong>0</strong></div>
+                        <div class="vehicle-item"><span>🚌 Xe buýt</span><strong>0</strong></div>
+                    </div>
                 </div>
                 <div class="stat-card alert-card">
                     <div class="stat-icon"><i class="fas fa-bell"></i></div>
                     <h4>Cảnh báo</h4>
-                    <div class="alert-count" id="alertCount">12</div>
+                    <div class="alert-count" id="alertCount">0</div>
                 </div>
             </div>
 
             <div class="charts-panel">
-                <div class="panel-header">
-                    <h3><i class="fas fa-chart-line"></i> Analytics</h3>
+                <div class="panel-header"
+                    style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                    <div style="display: flex; gap: 15px; align-items: center;">
+                        <h3><i class="fas fa-chart-line"></i> Phân tích</h3>
+                        <button id="btnDrawChart"
+                            style="background: #4cd137; border: none; padding: 6px 12px; border-radius: 20px; color: white; cursor: pointer; font-weight: bold; font-size: 0.8rem; display: flex; align-items: center; gap: 5px;">
+                            <i class="fas fa-sync-alt"></i> Tổng kết dữ liệu
+                        </button>
+                    </div>
+
                     <div class="chart-tabs">
                         <button class="tab active" data-tab="traffic">Lưu lượng</button>
-                        <button class="tab" data-tab="speed">Tốc độ</button>
+                        <button class="tab" data-tab="vehicleType">Phân loại xe</button>
                         <button class="tab" data-tab="violation">Vi phạm</button>
                     </div>
                 </div>
-                <div class="charts-container">
-                    <canvas id="trafficChart" class="chart"></canvas>
-                    <canvas id="speedChart" class="chart" style="display:none;"></canvas>
-                    <canvas id="violationChart" class="chart" style="display:none;"></canvas>
+                <div class="charts-container"
+                    style="position: relative; height: 300px; display: flex; justify-content: center; align-items: center; width: 100%;">
+                    <canvas id="trafficChart" class="chart" style="width: 100%; height: 100%;"></canvas>
+                    <canvas id="vehicleTypeChart" class="chart"
+                        style="display:none; width: 100%; height: 100%;"></canvas>
+                    <canvas id="violationChart" class="chart" style="display:none; width: 100%; height: 100%;"></canvas>
                 </div>
             </div>
 
