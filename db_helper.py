@@ -8,10 +8,6 @@ CONN_STR = (
     r'Trusted_Connection=yes;'
 )
 
-# =====================================================================
-# 1. HÀM QUẢN LÝ NGUỒN VIDEO
-# =====================================================================
-
 
 def get_or_create_video_source(filename):
     """
@@ -22,7 +18,6 @@ def get_or_create_video_source(filename):
         conn = pyodbc.connect(CONN_STR)
         cursor = conn.cursor()
 
-        # Kiểm tra xem video đã tồn tại chưa
         cursor.execute(
             "SELECT source_id FROM VideoSource WHERE source_name = ?", (filename,))
         row = cursor.fetchone()
@@ -31,7 +26,6 @@ def get_or_create_video_source(filename):
             source_id = row[0]
             print(f"[DB] Video đã tồn tại, lấy source_id: {source_id}")
         else:
-            # Nếu chưa có thì Insert và lấy ID vừa tạo trả về luôn (OUTPUT INSERTED)
             cursor.execute("""
                 INSERT INTO VideoSource (source_name, source_path, status) 
                 OUTPUT INSERTED.source_id 
@@ -48,10 +42,6 @@ def get_or_create_video_source(filename):
         print(f"[DB ERROR] Lỗi get_or_create_video_source: {e}")
         return None
 
-# =====================================================================
-# 2. HÀM QUẢN LÝ VẠCH ẢO (UPSERT: Update hoặc Insert)
-# =====================================================================
-
 
 def save_system_config(source_id, x1, y1, x2, y2):
     """
@@ -62,13 +52,11 @@ def save_system_config(source_id, x1, y1, x2, y2):
         conn = pyodbc.connect(CONN_STR)
         cursor = conn.cursor()
 
-        # Kiểm tra xem video này đã cấu hình vạch trước đó chưa
         cursor.execute(
             "SELECT config_id FROM SystemConfig WHERE source_id = ?", (source_id,))
         row = cursor.fetchone()
 
         if row:
-            # Nếu có rồi -> Cập nhật đè lên (Ghi đè vạch mới)
             cursor.execute("""
                 UPDATE SystemConfig 
                 SET line_start_x=?, line_start_y=?, line_end_x=?, line_end_y=? 
@@ -76,7 +64,6 @@ def save_system_config(source_id, x1, y1, x2, y2):
             """, (x1, y1, x2, y2, source_id))
             print(f"[DB] Đã UPDATE vạch ảo mới cho source_id {source_id}")
         else:
-            # Nếu chưa có -> Thêm mới
             cursor.execute("""
                 INSERT INTO SystemConfig (source_id, line_start_x, line_start_y, line_end_x, line_end_y)
                 VALUES (?, ?, ?, ?, ?)
@@ -90,15 +77,11 @@ def save_system_config(source_id, x1, y1, x2, y2):
         print(f"[DB ERROR] Lỗi save_system_config: {e}")
 
 
-# =====================================================================
-# 3. HÀM LƯU LOG PHƯƠNG TIỆN (CHẠY BẤT ĐỒNG BỘ - GIỮ NGUYÊN)
-# =====================================================================
 def insert_log_async(track_id, log_string, record_time, source_id=None):
     """
     Xử lý chuỗi log_string (VD: "Car" hoặc "Motorcycle (no helmet)")
     để lưu chuẩn vào database.
     """
-    # Phân tách logic lưu
     vehicle_type = "Motorcycle" if "no helmet" in log_string or "helmet" in log_string else log_string
     is_violation = 1 if "no helmet" in log_string else 0
     violation_name = "Không mũ bảo hiểm" if is_violation == 1 else None
@@ -118,14 +101,10 @@ def insert_log_async(track_id, log_string, record_time, source_id=None):
             conn.commit()
             cursor.close()
             conn.close()
-            # print(f"[DB] Đã lưu SQL: {vehicle_type} | Vi phạm: {is_violation} (ID: {track_id})") # Đã ẩn để bớt rác console
         except Exception as e:
             print(f"[DB ERROR] Lỗi lưu CSDL: {e}")
 
-    # Khởi chạy luồng phụ
     threading.Thread(target=run_query, daemon=True).start()
-
-    # Thêm vào cuối file db_helper.py
 
 
 def get_chart_statistics(source_id):
@@ -143,10 +122,8 @@ def get_chart_statistics(source_id):
         }
 
         if source_id is None:
-            return stats  # Trả về rỗng nếu chưa có video
+            return stats
 
-        # 1. Query cho biểu đồ Lưu lượng (Gom nhóm theo phút)
-        # Sử dụng FORMAT (SQL Server 2012+) để lấy giờ:phút
         cursor.execute("""
             SELECT FORMAT(RecordTime, 'HH:mm') as TimeMinute, COUNT(TrackID) as CarCount
             FROM VehicleLogs
@@ -158,7 +135,6 @@ def get_chart_statistics(source_id):
             stats["traffic_over_time"]["labels"].append(row[0])
             stats["traffic_over_time"]["data"].append(row[1])
 
-        # 2. Query cho biểu đồ Phân loại xe
         cursor.execute("""
             SELECT VehicleType, COUNT(TrackID) 
             FROM VehicleLogs 
@@ -170,7 +146,6 @@ def get_chart_statistics(source_id):
             if v_type in stats["vehicle_types"]:
                 stats["vehicle_types"][v_type] = row[1]
 
-        # Cộng dồn xe máy vi phạm vào tổng xe máy
         cursor.execute("""
             SELECT COUNT(TrackID) 
             FROM VehicleLogs 
@@ -179,7 +154,6 @@ def get_chart_statistics(source_id):
         no_helmet_count = cursor.fetchone()[0]
         stats["vehicle_types"]["Motorcycle"] += no_helmet_count
 
-        # 3. Query cho biểu đồ Vi phạm (Mũ bảo hiểm)
         stats["violations"]["No_Helmet"] = no_helmet_count
         stats["violations"]["Helmet"] = stats["vehicle_types"]["Motorcycle"] - \
             no_helmet_count

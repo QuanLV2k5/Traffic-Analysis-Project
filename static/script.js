@@ -54,16 +54,18 @@ class TrafficDashboard {
                 let color = "#00d4ff";
                 let borderClass = "";
 
-                if (e.type.includes("Motorcycle")) {
+                // KIỂM TRA ĐÚNG CHUỖI ĐỂ HIỂN THỊ ICON CHUẨN XÁC
+                if (e.type === "Motorcycle") {
                     icon = "motorcycle";
-                    if (e.type.includes("no helmet") || e.type.includes("Không mũ") || e.type.includes("no")) {
-                        icon = "exclamation-triangle";
-                        color = "#ff4757";
-                        borderClass = "helmet-no";
-                    }
+                } else if (e.type.includes("Không mũ") || e.type.includes("no helmet")) {
+                    icon = "exclamation-triangle"; // Icon cảnh báo nguy hiểm
+                    color = "#ff4757"; // Đỏ
+                    borderClass = "helmet-no";
+                } else if (e.type === "Truck") {
+                    icon = "truck";
+                } else if (e.type === "Bus") {
+                    icon = "bus";
                 }
-                else if (e.type === "Truck") icon = "truck";
-                else if (e.type === "Bus") icon = "bus";
 
                 return `
                 <div class="detection-item ${borderClass}" style="animation: fadeIn 0.5s ease-out;">
@@ -77,9 +79,6 @@ class TrafficDashboard {
         } catch (e) { }
     }
 
-    // ==========================================
-    // HÀM VẼ 3 BIỂU ĐỒ TỪ DATABASE
-    // ==========================================
     async loadAndDrawCharts() {
         try {
             const res = await fetch('http://localhost:5000/api/chart_data');
@@ -92,7 +91,6 @@ class TrafficDashboard {
 
             Chart.defaults.color = '#fff';
 
-            // 1. Line Chart
             if (this.charts.traffic) this.charts.traffic.destroy();
             const ctxTraffic = document.getElementById('trafficChart').getContext('2d');
             this.charts.traffic = new Chart(ctxTraffic, {
@@ -111,7 +109,6 @@ class TrafficDashboard {
                 options: { responsive: true, maintainAspectRatio: false }
             });
 
-            // 2. Doughnut Chart (Phân loại xe)
             if (this.charts.vehicleType) this.charts.vehicleType.destroy();
             const ctxVehicle = document.getElementById('vehicleTypeChart').getContext('2d');
             this.charts.vehicleType = new Chart(ctxVehicle, {
@@ -132,7 +129,6 @@ class TrafficDashboard {
                 options: { responsive: true, maintainAspectRatio: false }
             });
 
-            // 3. Pie Chart (Mũ bảo hiểm)
             if (this.charts.violation) this.charts.violation.destroy();
             const ctxViolation = document.getElementById('violationChart').getContext('2d');
             this.charts.violation = new Chart(ctxViolation, {
@@ -291,13 +287,9 @@ class TrafficDashboard {
             });
         }
 
-        // =====================================
-        // SỰ KIỆN CHO NÚT TỔNG KẾT VÀ TABS
-        // =====================================
         const btnDrawChart = document.getElementById('btnDrawChart');
         if (btnDrawChart) {
             btnDrawChart.addEventListener('click', () => {
-                // Nhảy về Tab Lưu lượng mặc định
                 document.querySelector('.tab[data-tab="traffic"]').click();
                 this.loadAndDrawCharts();
             });

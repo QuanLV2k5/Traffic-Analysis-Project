@@ -5,11 +5,9 @@ import time
 from ultralytics import YOLO
 from db_helper import insert_log_async
 
-# 1. LOAD MODEL
 model = YOLO('models/best.pt')
 helmet_model = YOLO('models/helmet.pt')
 
-# 2. ĐỊNH NGHĨA ÁNH XẠ
 REAL_NAMES = {0: "Motorcycle", 1: "Car", 2: "Bus", 3: "Truck"}
 CLASS_COLORS = {
     "Motorcycle": (0, 165, 255),
@@ -18,9 +16,8 @@ CLASS_COLORS = {
     "Truck": (255, 0, 255)
 }
 
-# 3. BIẾN TOÀN CÚC
 current_video_path = None
-current_source_id = None  # <-- Đã thêm biến lưu ID video
+current_source_id = None
 counted_ids = set()
 traffic_stats = {"total_vehicles": 0,
                  "motorbike": 0, "car": 0, "truck": 0, "bus": 0,
@@ -38,7 +35,6 @@ def set_virtual_line(x1, y1, x2, y2):
     print(f"Đã cập nhật vạch mới: {virtual_line}")
 
 
-# --- ĐÃ SỬA: Nhận thêm tham số source_id từ main.py ---
 def reset_ai_state(filepath, source_id=None):
     global current_video_path, current_source_id, counted_ids, traffic_stats, event_logs, track_history, virtual_line, is_running
     current_video_path = filepath
@@ -50,8 +46,6 @@ def reset_ai_state(filepath, source_id=None):
     is_running = False
     for key in traffic_stats:
         traffic_stats[key] = 0
-
-# --- ĐÃ THÊM: Hàm lấy ID video hiện tại để main.py gọi ---
 
 
 def get_current_source_id():
@@ -153,7 +147,7 @@ def generate_frames():
 
                                 if helmet_model is not None:
                                     h_img, w_img, _ = frame.shape
-                                    crop_y1 = max(0, y1 - 20)
+                                    crop_y1 = max(0, y1 - 50)
                                     crop_y2 = min(h_img, y2)
                                     crop_x1 = max(0, x1 - 10)
                                     crop_x2 = min(w_img, x2 + 10)
@@ -163,7 +157,7 @@ def generate_frames():
 
                                     if motorcycle_crop.size > 0:
                                         h_results = helmet_model.predict(
-                                            motorcycle_crop, conf=0.4, verbose=False)
+                                            motorcycle_crop, conf=0.2, verbose=False)
                                         is_violation = False
                                         for h_box in h_results[0].boxes:
                                             h_name = helmet_model.names[int(
@@ -195,7 +189,6 @@ def generate_frames():
 
                             time_sql = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-                            # --- ĐÃ SỬA: Đẩy current_source_id vào db_helper ---
                             insert_log_async(
                                 track_id, log_type, time_sql, current_source_id)
 

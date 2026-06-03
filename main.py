@@ -3,12 +3,7 @@ from flask import Flask, jsonify, request, Response, render_template
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
-# Import thêm hàm get_current_source_id từ core_ai
 from core_ai import generate_frames, reset_ai_state, traffic_stats, event_logs, set_virtual_line, replay_video, get_current_source_id
-
-# ==========================================
-# MỚI: Import các hàm tương tác Database
-# ==========================================
 from db_helper import get_or_create_video_source, save_system_config, get_chart_statistics
 
 app = Flask(__name__)
@@ -37,12 +32,8 @@ def upload_video():
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
 
-    # ==========================================
-    # MỚI: Gọi DB để lưu video và lấy source_id
-    # ==========================================
     source_id = get_or_create_video_source(filename)
 
-    # Đánh thức AI, truyền kèm source_id vào để AI nhớ
     reset_ai_state(filepath, source_id)
 
     return jsonify({"success": True, "message": "Video uploaded successfully"})
@@ -58,12 +49,8 @@ def update_line():
     data = request.json
     x1, y1, x2, y2 = data['x1'], data['y1'], data['x2'], data['y2']
 
-    # 1. Báo cho AI biết để vẽ lên video
     set_virtual_line(x1, y1, x2, y2)
 
-    # ==========================================
-    # MỚI: Lưu tọa độ vạch vào bảng SystemConfig
-    # ==========================================
     source_id = get_current_source_id()
     if source_id:
         save_system_config(source_id, x1, y1, x2, y2)
@@ -76,7 +63,6 @@ def get_stats():
     total_motos = traffic_stats.get("motorbike", 0)
     no_helmet = traffic_stats.get("no_helmet", 0)
 
-    # Tính toán tỷ lệ đội mũ thật
     if total_motos > 0:
         compliance_rate = round(
             ((total_motos - no_helmet) / total_motos) * 100, 1)
@@ -86,7 +72,7 @@ def get_stats():
     return jsonify({
         "total_vehicles": traffic_stats["total_vehicles"],
         "compliance_rate": f"{compliance_rate}%",
-        "alerts": no_helmet,  # Đếm số ca vi phạm đẩy ra frontend
+        "alerts": no_helmet,
         "avg_speed": "N/A"
     })
 
